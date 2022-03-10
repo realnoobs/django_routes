@@ -14,6 +14,7 @@ For example, you might have a `urls.py` that looks something like this:
 
 """
 from inspect import isclass
+from logging import getLogger
 
 from django.core.exceptions import ImproperlyConfigured
 from django.urls.conf import include, path
@@ -23,6 +24,8 @@ from django_hookup import core as hookup
 
 from .settings import routers_settings
 from .views import SiteView
+
+logger = getLogger("site_routers")
 
 
 class BaseRouter:
@@ -171,6 +174,7 @@ class AuthenticationRouter(SimpleRouter):
             urls += list(urlpatterns)
             return urls
         except Exception as err:
+            logger.error(err)
             return []
 
 

@@ -110,12 +110,38 @@ class DefaultRouter(SimpleRouter):
     index_enabled = True
     index_view_name = "index"
     index_view_class = DefaultIndexView
+    site_view_hook_name = "REGISTER_SITE_VIEW"
+    site_path_hook_name = "REGISTER_SITE_PATH"
 
     def get_index_view_class(self):
         """
         Return a basic root view.
         """
         return self.index_view_class
+
+    def get_hooked_views(self):
+        # Get registered custom admin view
+        funcs = hookup.get_hooks(self.site_view_hook_name)
+        urls = []
+        for func in funcs:
+            url_path, view, name = func()
+            if isclass(view):
+                if not issubclass(view, View):
+                    raise ImproperlyConfigured("%s must be subclass of View" % view)
+                route = path(url_path, view.as_view(), name=name)
+            elif callable(view):
+                route = path(url_path, view, name=name)
+            else:
+                raise ImproperlyConfigured("%s must be View or function" % view)
+            urls.append(route)
+        return urls
+
+    def get_hooked_paths(self):
+        urls = []
+        funcs = hookup.get_hooks(self.site_path_hook_name)
+        for func in funcs:
+            urls.append(func())
+        return urls
 
     def get_urls(self):
         """
@@ -131,6 +157,8 @@ class DefaultRouter(SimpleRouter):
                     name=self.index_view_name,
                 ),
             )
+        urls += self.get_hooked_views()
+        urls += self.get_hooked_paths()
         return urls
 
 
@@ -149,8 +177,6 @@ class AuthenticationRouter(SimpleRouter):
 class Site(DefaultRouter):
 
     site_url = "/"
-    site_view_hook_name = "REGISTER_SITE_VIEW"
-    site_path_hook_name = "REGISTER_SITE_PATH"
     authentication_router_class = AuthenticationRouter
 
     def __init__(self):
@@ -187,30 +213,6 @@ class Site(DefaultRouter):
     def get_authentication_urls(self):
         return self.get_authentication_router().get_urls()
 
-    def get_hooked_views(self):
-        # Get registered custom admin view
-        funcs = hookup.get_hooks(self.site_view_hook_name)
-        urls = []
-        for func in funcs:
-            url_path, view, name = func()
-            if isclass(view):
-                if not issubclass(view, View):
-                    raise ImproperlyConfigured("%s must be subclass of View" % view)
-                route = path(url_path, view.as_view(), name=name)
-            elif callable(view):
-                route = path(url_path, view, name=name)
-            else:
-                raise ImproperlyConfigured("%s must be View or function" % view)
-            urls.append(route)
-        return urls
-
-    def get_hooked_paths(self):
-        urls = []
-        funcs = hookup.get_hooks(self.site_path_hook_name)
-        for func in funcs:
-            urls.append(func())
-        return urls
-
     def get_urls(self):
         """
         Generate the list of URL patterns, including a default root view
@@ -218,7 +220,4 @@ class Site(DefaultRouter):
         """
         urls = super().get_urls()
         urls += self.get_authentication_urls()
-        urls += self.get_hooked_views()
-        urls += self.get_hooked_paths()
-
         return urls

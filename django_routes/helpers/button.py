@@ -11,15 +11,15 @@ class ButtonHelper:
     edit_button_classnames = []
     delete_button_classnames = ["no"]
 
-    def __init__(self, view, request):
-        self.view = view
+    def __init__(self, viewset, request):
+        self.viewset = viewset
         self.request = request
-        self.model = view.model
-        self.opts = view.model._meta
+        self.model = viewset.model
+        self.opts = viewset.opts
         self.verbose_name = force_str(self.opts.verbose_name)
         self.verbose_name_plural = force_str(self.opts.verbose_name_plural)
-        self.permission_helper = view.permission_helper
-        self.url_helper = view.url_helper
+        self.permission_helper = viewset.permission_helper
+        self.url_helper = viewset.url_helper
 
     def finalise_classname(self, classnames_add=None, classnames_exclude=None):
         if classnames_add is None:

@@ -13,50 +13,44 @@ For example, you might have a `urls.py` that looks something like this:
     urlpatterns = router.urls
 
 """
+
+from audioop import reverse
 from inspect import isclass
 from logging import getLogger
 
 from django.core.exceptions import ImproperlyConfigured
 from django.urls.conf import include, path
 from django.views import View
-
 from django_hookup import core as hookup
 
 from .settings import routers_settings
-from .views import SiteView
+from .views import BaseView
 
 logger = getLogger("site_routers")
 
 
+class DefaultIndexView(BaseView):
+    template_name = "index.html"
+
+
 class BaseRouter:
+
+    namespace = None
+
     def __init__(self):
         self.registry = []
+        if self.namespace is None:
+            raise ImproperlyConfigured(
+                "%s router namespace required!" % self.__class__.__name__,
+            )
 
-    def register(
-        self,
-        viewset,
-        prefix=None,
-        basename=None,
-        trailing_slash=True,
-    ):
-        if basename is None:
-            basename = self.get_default_basename(viewset)
-        if prefix is None:
-            prefix = basename
-        if trailing_slash and not prefix.endswith("/"):
-            prefix = "%s/" % prefix
-        self.registry.append((prefix, viewset, basename))
+    def register(self, viewset_class):
+        viewset = viewset_class(router=self)
+        self.registry.append(viewset)
 
         # invalidate the urls cache
         if hasattr(self, "_urls"):
             del self._urls
-
-    def get_default_basename(self, viewset):
-        """
-        If `basename` is not specified, attempt to automatically determine
-        it from the viewset.
-        """
-        raise NotImplementedError("get_default_basename must be overridden")
 
     def get_urls(self):
         """
@@ -77,31 +71,9 @@ class SimpleRouter(BaseRouter):
         Use the registered viewsets to generate a list of URL patterns.
         """
         urls = []
-        for prefix, viewset, name in self.registry:
-            urls.append(path(prefix, include(viewset.urls)))
+        for viewset in self.registry:
+            urls.append(path("%s" % viewset.get_prefix(), include(viewset.urls)))
         return urls
-
-    def get_default_basename(self, viewset):
-        """
-        If `basename` is not specified, attempt to automatically determine
-        it from the viewset.
-        """
-        model = getattr(viewset, "model", None)
-
-        assert model is not None, (
-            "`basename` argument not specified, and could "
-            "not automatically determine the name from the viewset, as "
-            "it does not have a `.model` attribute."
-        )
-
-        return model._meta.object_name.lower()
-
-
-class DefaultIndexView(SiteView):
-    template_name = "index.html"
-
-    def get_template_names(self):
-        return super().get_template_names()
 
 
 class DefaultRouter(SimpleRouter):
@@ -115,6 +87,17 @@ class DefaultRouter(SimpleRouter):
     index_view_class = DefaultIndexView
     site_view_hook_name = "REGISTER_SITE_VIEW"
     site_path_hook_name = "REGISTER_SITE_PATH"
+
+    def each_context(self, request):
+        """
+        Return a dictionary of variables to put in the template context for
+        *every* page in this router site.
+        """
+        return {
+            "site_title": routers_settings.SITE_TITLE,
+            "site_header": routers_settings.SITE_HEADER,
+            "site_url": reverse("%s_%s" % (self.namespace, self.index_view_name)),
+        }
 
     def get_index_view_class(self):
         """
@@ -180,27 +163,11 @@ class AuthenticationRouter(SimpleRouter):
 
 class Site(DefaultRouter):
 
-    site_url = "/"
+    namespace = "website"
     authentication_router_class = AuthenticationRouter
 
     def __init__(self):
         super().__init__()
-
-    def each_context(self, request):
-        """
-        Return a dictionary of variables to put in the template context for
-        *every* page in the admin site.
-
-        For sites running on a subpath, use the SCRIPT_NAME value if site_url
-        hasn't been customized.
-        """
-        script_name = request.META["SCRIPT_NAME"]
-        site_url = script_name if routers_settings.SITE_URL == "/" and script_name else self.site_url
-        return {
-            "site_title": routers_settings.SITE_TITLE,
-            "site_header": routers_settings.SITE_HEADER,
-            "site_url": site_url,
-        }
 
     def index_view(self, request):
         context = self.each_context(request)

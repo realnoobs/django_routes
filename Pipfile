@@ -7,6 +7,7 @@ name = "pypi"
 django = "==3.2.7"
 django-hookup = "*"
 django-allauth = "*"
+django-filter = "*"
 
 [dev-packages]
 coverage = "*"
